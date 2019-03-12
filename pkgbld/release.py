@@ -30,7 +30,7 @@ WORKING_DIR = os.path.join(
 BUILDS_DIR = 'pkgbld_output'
 
 
-def release(repo_name, pkg_name, version, also37=True, dryrun=False):
+def release(repo_name, pkg_name, version, also37=True, dryrun=False, local=None):
     """
     Conduct local build and upload to Anaconda Cloud of conda packages
     for each operating-system platform and Python version for the specified
@@ -53,6 +53,9 @@ def release(repo_name, pkg_name, version, also37=True, dryrun=False):
 
     dryrun: boolean
         whether or not just the package build/upload plan is shown
+
+    local: path
+        local files to use instead of git cloning
 
     Raises
     ------
@@ -120,13 +123,19 @@ def release(repo_name, pkg_name, version, also37=True, dryrun=False):
     os.chdir(WORKING_DIR)
 
     # clone code for model_version from model repository
-    print((': Package-Builder is cloning repository code '
-           'for {}'.format(version)))
-    cmd = 'git clone --branch {} --depth 1 {}/{}/'.format(
-        version, GITHUB_URL, repo_name
-    )
-    u.os_call(cmd)
-    os.chdir(repo_name)
+    if local:
+        os.chdir(local)
+        cmd = 'git checkout -b v{version} {version}'.format(
+            version=version
+        )
+    else:
+        print((': Package-Builder is cloning repository code '
+            'for {}'.format(version)))
+        cmd = 'git clone --branch {} --depth 1 {}/{}/'.format(
+            version, GITHUB_URL, repo_name
+        )
+        u.os_call(cmd)
+        os.chdir(repo_name)
 
     # specify version in several repository files
     print(': Package-Builder is setting version')
@@ -177,12 +186,13 @@ def release(repo_name, pkg_name, version, also37=True, dryrun=False):
         # ... upload to Anaconda Cloud
         print((': Package-Builder is uploading packages '
                'for Python {}').format(pyver))
-        for platform in OS_PLATFORMS:
-            pkgpath = os.path.join(BUILDS_DIR, platform, pkgfile)
-            cmd = 'anaconda -t {} upload -u {} --force {}'.format(
-                ANACONDA_TOKEN_FILE, ANACONDA_USER, pkgpath
-            )
-            u.os_call(cmd)
+        if not local:
+            for platform in OS_PLATFORMS:
+                pkgpath = os.path.join(BUILDS_DIR, platform, pkgfile)
+                cmd = 'anaconda -t {} upload -u {} --force {}'.format(
+                    ANACONDA_TOKEN_FILE, ANACONDA_USER, pkgpath
+                )
+                u.os_call(cmd)
 
     print(': Package-Builder is cleaning-up')
 

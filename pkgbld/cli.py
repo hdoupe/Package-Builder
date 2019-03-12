@@ -59,6 +59,9 @@ def main():
                               'release version to stdout and quits'),
                         default=False,
                         action="store_true")
+    parser.add_argument("--local",
+                        help="Use local directory instead of cloning.",
+                        default=None)
     args = parser.parse_args()
     # show Package-Builder version and quit if --version option specified
     if args.version:
@@ -87,7 +90,11 @@ def main():
         print(emsg)
         print('USAGE:', usage_str)
         return 1
+    if args.local is not None:
+        assert os.path.exists(args.local)
+
     # call pkgbld release function with specified parameters
     pkgbld.release(repo_name, pkg_name, version,
-                   also37=args.also37, dryrun=args.dryrun)
+                   also37=args.also37, dryrun=args.dryrun,
+                   local=args.local)
     return 0
