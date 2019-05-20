@@ -13,9 +13,6 @@ import shutil
 import pkgbld.utils as u
 
 
-ALL_PYTHON_VERSIONS = ['3.6', '3.7']
-OS_PLATFORMS = ['osx-64', 'linux-64', 'win-32', 'win-64']
-
 GITHUB_URL = 'https://github.com/PSLmodels'
 ANACONDA_USER = 'pslmodels'
 ANACONDA_CHANNEL = ANACONDA_USER
@@ -24,6 +21,7 @@ ANACONDA_TOKEN_FILE = os.path.join(
     HOME_DIR,
     '.{}_anaconda_token'.format(ANACONDA_USER)
 )
+ANACONDA_TOKEN = os.environ.get("CONDA_TOKEN", None)
 WORKING_DIR = os.path.join(
     HOME_DIR,
     'temporary_pkgbld_working_dir'
@@ -107,21 +105,11 @@ def release(repo_name, pkg_name, version, local=False, dryrun=False,
         msg = 'version={} does not have X.Y.Z semantic-versioning pattern'
         raise ValueError(msg.format(version))
 
-    # specify Python versions list, which depends on local
-    assert sys.version_info[0] == 3
-    local_python_version = '3.{}'.format(sys.version_info[1])
-    python_versions = [local_python_version]  # always first in the list
-    if not local:
-        for ver in ALL_PYTHON_VERSIONS:
-            if ver not in python_versions:
-                python_versions.append(ver)
-
     # show execution plan
     print(': Package-Builder will build model packages for:')
     print(':   repository_name = {}'.format(repo_name))
     print(':   package_name = {}'.format(pkg_name))
     print(':   model_version = {}'.format(version))
-    print(':   python_versions = {}'.format(python_versions))
     print(':   additional channels= {}'.format(channels))
     if local:
         print(': Package-Builder will install package on local computer')
@@ -181,47 +169,26 @@ def release(repo_name, pkg_name, version, local=False, dryrun=False,
         replacement='__version__ = "{}"'.format(version)
     )
 
-    channel_str = f"--channel {ANACONDA_CHANNEL}"
+    channel_str = ""
     for channel in channels or []:
         channel_str += f" --channel {channel}"
+    channel_str += f" --channel defaults --channel {ANACONDA_CHANNEL}"
+
+    if local:
+        u.os_call("conda config --set anaconda_upload no")
+    else:
+        u.os_call("conda config --set anaconda_upload yes")
 
     # build and upload model package for each Python version and OS platform
-    local_platform = u.conda_platform_name()
-    for pyver in python_versions:
-        # ... build for local_platform
-        print((': Package-Builder is building package '
-               'for Python {}').format(pyver))
-        cmd = ('conda build --python {} --old-build-string '
-               '{} --override-channels '
-               '--no-anaconda-upload --output-folder {} '
-               'conda.recipe').format(pyver, channel_str, BUILDS_DIR)
-        u.os_call(cmd)
-        # ... if local is True, skip convert and upload logic
-        if local:
-            break  # out of for pyver loop
-        # ... convert local build to other OS_PLATFORMS
-        print((': Package-Builder is converting package '
-               'for Python {}').format(pyver))
-        pyver_parts = pyver.split('.')
-        pystr = pyver_parts[0] + pyver_parts[1]
-        pkgfile = '{}-{}-py{}_0.tar.bz2'.format(pkg_name, version, pystr)
-        pkgpath = os.path.join(BUILDS_DIR, local_platform, pkgfile)
-        for platform in OS_PLATFORMS:
-            if platform == local_platform:
-                continue
-            cmd = 'conda convert -p {} -o {} {}'.format(
-                platform, BUILDS_DIR, pkgpath
-            )
-            u.os_call(cmd)
-        # ... upload to Anaconda Cloud
-        print((': Package-Builder is uploading packages '
-               'for Python {}').format(pyver))
-        for platform in OS_PLATFORMS:
-            pkgpath = os.path.join(BUILDS_DIR, platform, pkgfile)
-            cmd = 'anaconda -t {} upload -u {} --force {}'.format(
-                ANACONDA_TOKEN_FILE, ANACONDA_USER, pkgpath
-            )
-            u.os_call(cmd)
+    print(': Package-Builder is building package')
+    # Check environment before file.
+    TOKEN = ANACONDA_TOKEN or ANACONDA_TOKEN_FILE
+    cmd = (
+        f"conda build conda.recipe/ --token {TOKEN} --user {ANACONDA_USER} "
+        f"--output-folder {BUILDS_DIR} --override-channels {channel_str}"
+    )
+    u.os_call(cmd)
+
     if local:
         # do uninstall and install on local computer
         print(': Package-Builder is uninstalling any existing package')
