@@ -20,6 +20,7 @@ config = {
     'include_package_data': True,
     'name': 'pkgbld',
     'install_requires': ['conda'],
+    "entry_points":{"console_scripts": ["pbrelease=pkgbld.cli:main"]},
     'classifiers': [
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
